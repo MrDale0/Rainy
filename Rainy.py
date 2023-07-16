@@ -10,17 +10,20 @@ import random
 import os
 import webbrowser
 import atexit
+import datetime
 
 dpg.create_context()
 dpg.create_viewport(title="Rainy Music", large_icon="icon.ico", small_icon="icon.ico", width=800, height=600)
 pygame.mixer.init()
 
-global state
+global state, song_duration, current_time
 state = None
+song_duration = 0
+current_time = 0
+
 
 _DEFAULT_MUSIC_VOLUME = 0.15
 pygame.mixer.music.set_volume(0.15)
-
 
 def update_volume(sender, app_data):
     pygame.mixer.music.set_volume(app_data / 100.0)
@@ -42,11 +45,12 @@ def update_database(filename: str):
 
 
 def play(sender, app_data, user_data):
-    global state
+    global state, song_duration, current_time
     if user_data:
         pygame.mixer.music.load(user_data)
         audio = MP3(user_data)
-        dpg.configure_item(item="pos", max_value=audio.info.length)
+        song_duration = audio.info.length
+        dpg.configure_item(item="pos", max_value=song_duration)
         pygame.mixer.music.play()
         if pygame.mixer.music.get_busy():
             dpg.configure_item("play", label="Pause")
@@ -92,19 +96,26 @@ def on_slider_drag_callback(sender, app_data):
         pygame.mixer.music.set_pos(pos)
     elif state == "paused":
         pos = app_data
-        #pygame.mixer.music.load(pygame.mixer.music.get_filename())
         pygame.mixer.music.set_pos(pos)
-        #pygame.mixer.music.pause()
     else:
         dpg.configure_item(item="pos", default_value=0.0)
 
 
 def update_slider():
-    global state
+    global state, song_duration, current_time, timer
     while pygame.mixer.music.get_busy() and state == "playing":
         pos = pygame.mixer.music.get_pos() / 1000
+        timer = pygame.mixer.music.get_pos() / 1000
         dpg.set_value("pos", pos)
+        current_time = format_time(int(timer))
+        total_time = format_time(int(song_duration))
+        dpg.configure_item("timer", default_value=f"Time: {current_time} / {total_time}")
         time.sleep(0.1)
+
+
+def format_time(seconds):
+    minutes, seconds = divmod(seconds, 60)
+    return f"{minutes:02d}:{seconds:02d}"
 
 
 def stop():
@@ -214,7 +225,7 @@ with dpg.font_registry():
 
 with dpg.window(tag="main", label="Rainy Music"):
     with dpg.child_window(autosize_x=True, height=45, no_scrollbar=True):
-        dpg.add_text(f"Now Playing: ", tag="csong")
+            dpg.add_text(f"Now Playing: ", tag="csong") 
     dpg.add_spacer(height=2)
 
     with dpg.group(horizontal=True):
@@ -222,8 +233,7 @@ with dpg.window(tag="main", label="Rainy Music"):
             dpg.add_text("Rainy Musicart", color=(137, 142, 255))
             dpg.add_text("Build by MrDale0")
             dpg.add_spacer(height=2)
-            dpg.add_button(label="Support", width=-1, height=23,
-                           callback=lambda: webbrowser.open(url="https://github.com/NotCookey/Rainy"))
+            dpg.add_button(label="Support", width=-1, height=23, callback=lambda: webbrowser.open(url="https://github.com/MrDale0"))
             dpg.add_spacer(height=5)
             dpg.add_separator()
             dpg.add_spacer(height=5)
@@ -234,6 +244,7 @@ with dpg.window(tag="main", label="Rainy Music"):
             dpg.add_separator()
             dpg.add_spacer(height=5)
             dpg.add_text(f"State: {state}", tag="cstate")
+            dpg.add_text("Time: 00:00 / 00:00", tag="timer")
             dpg.add_spacer(height=5)
             dpg.add_separator()
 
@@ -242,20 +253,25 @@ with dpg.window(tag="main", label="Rainy Music"):
                 with dpg.group(horizontal=True):
                     dpg.add_button(label="Play", width=65, height=30, tag="play", callback=on_play_pause_callback)
                     dpg.add_button(label="Stop", callback=stop, width=65, height=30)
-                    dpg.add_slider_float(tag="volume", width=120, height=15, pos=(160, 19), format="%.0f%%",
-                                         default_value=_DEFAULT_MUSIC_VOLUME * 100, callback=update_volume)
-                    dpg.add_slider_float(tag="pos", width=-1, pos=(295, 19), format="%0.2f", callback=on_slider_drag_callback)
+                    dpg.add_slider_float(tag="volume", width=120, height=15, pos=(160, 19), format="%.0f%%", default_value=_DEFAULT_MUSIC_VOLUME * 100, callback=update_volume)
+                    dpg.add_slider_float(tag="pos", width=-1, pos=(295, 19), format="", callback=on_slider_drag_callback)
+                    
 
             with dpg.child_window(autosize_x=True, delay_search=True):
                 with dpg.group(horizontal=True, tag="query"):
                     dpg.add_input_text(hint="Search for a song", width=-1, callback=search)
-                dpg.add_spacer(height=5)
+                    dpg.add_spacer(height=5)
                 with dpg.child_window(autosize_x=True, delay_search=True, tag="list"):
                     load_database()
+
 
     dpg.bind_item_theme("volume", "slider_thin")
     dpg.bind_item_theme("pos", "slider")
     dpg.bind_item_theme("list", "songs")
+
+    # Add text widget for timer
+    #dpg.add_text("Time: 00:00 / 00:00", tag="timer", parent="main")
+
 
 dpg.bind_theme("base")
 dpg.bind_font(monobold)
@@ -264,7 +280,6 @@ dpg.bind_font(monobold)
 def safe_exit():
     pygame.mixer.music.stop()
     pygame.quit()
-
 
 atexit.register(safe_exit)
 
